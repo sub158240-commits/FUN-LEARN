@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FUN&amp;LEARN — التعلم الممتع</title>
+    <meta name="description" content="منصة تعليمية تفاعلية للطلاب - العب واتعلم واكسب العملات!">
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- PWA & Theme -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4F46E5">
+    <link rel="apple-touch-icon" href="assets/images/logo-192.png">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js').then(reg => {
+            console.log('ServiceWorker registered:', reg.scope);
+          }).catch(err => {
+            console.log('ServiceWorker registration failed:', err);
+          });
+        });
+      }
+    </script>
+</head>
+<body class="light-mode">
+
+<!-- ══════════ LOADER ══════════ -->
+<div id="loader" class="loader-container">
+    <div class="loader-cartoon" style="font-size: 5rem;">🚀</div>
+    <div style="font-size:1.5rem;font-weight:900;color:var(--primary);margin-top:1rem;" data-i18n="loading">جاري التحميل...</div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app-container">
+
+    <!-- HEADER -->
+    <header id="app-header">
+        <div class="header-left">
+            <span class="logo-text notranslate" id="logo-txt" style="display:inline-block; font-family:'Baloo Bhaijaan 2', cursive; font-size:1.4rem; font-weight:900; color:var(--primary); letter-spacing:0.5px;">
+                FUN<span class="accent" style="color:var(--gold);">&</span>LEARN
+            </span>
+        </div>
+
+        <div class="header-right">
+            <!-- Coins (shown only when logged in) -->
+            <div id="header-coins-wrap" class="header-coins" style="display:none;" onclick="App.navigate('shop')">
+                <span class="coin-icon">🪙</span>
+                <span id="header-coins-val">0</span>
+            </div>
+
+            <!-- Language toggle -->
+            <button id="lang-toggle" class="icon-btn" title="تغيير اللغة" aria-label="Change language">
+                🌍<span class="lang-text">EN</span>
+            </button>
+
+            <!-- Theme toggle -->
+            <button id="theme-toggle" class="icon-btn" title="الوضع الليلي" aria-label="Toggle dark mode">
+                🌙
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main id="main-content"></main>
+
+    <!-- BOTTOM NAV (shown for students) -->
+    <nav id="bottom-nav" style="display:none;">
+        <a href="#home" class="nav-item active" id="nav-home">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label" data-i18n="navHome">الرئيسية</span>
+        </a>
+        <a href="#shop" class="nav-item" id="nav-shop">
+            <span class="nav-icon">🛍️</span>
+            <span class="nav-label">المتجر</span>
+        </a>
+        <a href="#results" class="nav-item" id="nav-results">
+            <span class="nav-icon">🏆</span>
+            <span class="nav-label">الشرف</span>
+        </a>
+        <a href="#account" class="nav-item" id="nav-account">
+            <span class="nav-icon">👤</span>
+            <span class="nav-label" data-i18n="navAccount">حسابي</span>
+        </a>
+    </nav>
+
+</div><!-- /#app-container -->
+
+<!-- ══════════ TEMPLATES ══════════ -->
+
+<!-- LANDING TEMPLATE -->
+<template id="tpl-landing">
+    <div class="auth-wrap">
+        <div class="auth-page slide-in" style="text-align:center; padding:3rem 1.5rem;">
+            <div style="font-size:4rem; margin-bottom:1rem;">🚀</div>
+            <h1 style="color:var(--primary); font-size:1.8rem; margin-bottom:0.5rem;">مرحباً بك في FUN&LEARN</h1>
+            <p class="text-muted" style="margin-bottom:2rem;">كيف تفضل استخدام البرنامج؟</p>
+            
+            <button class="btn btn-primary btn-block mb-3" style="font-size:1.1rem; padding:1rem;" onclick="App.downloadDesktopApp()">
+                💻 تحميل التطبيق على سطح المكتب
+            </button>
+            <button class="btn btn-ghost btn-block" style="font-size:1rem; border:2px solid var(--border);" onclick="App.continueToWebsite()">
+                🌐 تواصل التصفح عن طريق الموقع
+            </button>
+        </div>
+    </div>
+</template>
+
+<!-- LOGIN TEMPLATE -->
+<template id="tpl-login">
+    <div class="auth-wrap">
+        <div class="auth-page slide-in">
+            <div class="notranslate" style="font-family:'Baloo Bhaijaan 2', cursive; font-size:2.5rem; font-weight:900; color:var(--primary); letter-spacing:0.5px; text-align:center; margin-bottom:1rem;">
+                FUN<span class="accent" style="color:var(--gold);">&</span>LEARN
+            </div>
+            <div class="auth-header">
+                <h1 data-i18n="welcomeBack">أهلاً بعودتك! 👋</h1>
+                <p data-i18n="loginSubtitle">سجّل دخولك وكمّل رحلتك</p>
+            </div>
+
+            <form id="login-form" autocomplete="off">
+                <div class="form-group">
+                    <label class="form-label" data-i18n="emailOrUsername">اسم المستخدم</label>
+                    <input id="login-identifier" type="text" class="form-input" required
+                           placeholder="أدخل اسمك أو إيميلك" data-i18n="emailOrUsername" autocapitalize="none">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="password">كلمة المرور</label>
+                    <input id="login-password" type="password" class="form-input" required
+                           placeholder="كلمة المرور">
+                </div>
+                <button id="login-btn" type="submit" class="btn btn-primary btn-block btn-lg" data-i18n="loginBtn">
+                    تسجيل الدخول
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <span data-i18n="noAccount">مستخدم جديد؟</span>
+                &nbsp;<a href="#register" data-i18n="registerLink">إنشاء حساب</a>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- REGISTER TEMPLATE -->
+<template id="tpl-register">
+    <div class="auth-wrap">
+        <div class="auth-page slide-in">
+            <div class="notranslate" style="font-family:'Baloo Bhaijaan 2', cursive; font-size:2.5rem; font-weight:900; color:var(--primary); letter-spacing:0.5px; text-align:center; margin-bottom:1rem;">
+                FUN<span class="accent" style="color:var(--gold);">&</span>LEARN
+            </div>
+            <div class="auth-header">
+                <h1 data-i18n="createAccount">سجّل معنا! 🎉</h1>
+                <p data-i18n="registerSubtitle">انضم للمجتمع واستمتع بالتعلم</p>
+            </div>
+
+            <form id="register-form" autocomplete="off">
+                <!-- Avatar -->
+                <div class="avatar-selection">
+                    <span class="avatar-selection-label" data-i18n="chooseAvatar">اختر شخصيتك</span>
+                    <div class="avatars">
+                        <label>
+                            <input type="radio" name="avatar" value="boy" checked>
+                            <div class="avatar-card">👦</div>
+                        </label>
+                        <label>
+                            <input type="radio" name="avatar" value="girl">
+                            <div class="avatar-card">👧</div>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" data-i18n="chooseClass">اختر الصف الدراسي</label>
+                    <select id="reg-class" class="form-input" required>
+                        <option value="" disabled selected data-i18n="selectClassPrompt">اختر الصف...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" data-i18n="username">اسم المستخدم</label>
+                    <input id="reg-username" type="text" class="form-input" required
+                           placeholder="اسم المستخدم" autocapitalize="none">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="email">البريد الإلكتروني</label>
+                    <input id="reg-email" type="email" class="form-input" required
+                           placeholder="البريد الإلكتروني">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="password">كلمة المرور</label>
+                    <input id="reg-password" type="password" class="form-input" required
+                           placeholder="كلمة المرور">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="confirmPassword">تأكيد كلمة المرور</label>
+                    <input id="reg-confirm" type="password" class="form-input" required
+                           placeholder="أعد إدخال كلمة المرور">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg" data-i18n="registerBtn">
+                    إنشاء الحساب
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <span data-i18n="haveAccount">عندك حساب؟</span>
+                &nbsp;<a href="#login" data-i18n="loginLink">تسجيل الدخول</a>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- ══════════ SCRIPTS ══════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/store.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/student.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

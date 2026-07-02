@@ -1,0 +1,21 @@
+{
+  "name": "FUN&LEARN",
+  "short_name": "FUN&LEARN",
+  "description": "منصة تعليمية تفاعلية للطلاب - العب واتعلم واكسب العملات!",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4F46E5",
+  "icons": [
+    {
+      "src": "assets/images/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/images/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
