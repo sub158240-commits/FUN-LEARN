@@ -70,12 +70,23 @@ const AdminView = {
                     </div>
                 </div>
 
-                <div class="card card-interactive" onclick="AdminView.renderReports()">
+                <div class="card card-interactive" onclick="AdminView.renderReports()" style="margin-bottom:0.75rem;">
                     <div style="display:flex; align-items:center; gap:1rem;">
                         <div style="font-size:2rem;">📊</div>
                         <div>
                             <h3 style="color: var(--primary); margin:0 0 0.2rem;">التقارير والإحصائيات</h3>
                             <p class="text-muted" style="font-size: 0.85rem; margin:0;">نتائج الألعاب، تسليم الواجبات</p>
+                        </div>
+                        <div class="class-card-arrow" style="margin-right:auto;">›</div>
+                    </div>
+                </div>
+
+                <div class="card card-interactive" onclick="AdminView.renderAdminSettings()">
+                    <div style="display:flex; align-items:center; gap:1rem;">
+                        <div style="font-size:2rem;">🔐</div>
+                        <div>
+                            <h3 style="color: var(--primary); margin:0 0 0.2rem;">إعدادات حساب الأدمن</h3>
+                            <p class="text-muted" style="font-size: 0.85rem; margin:0;">تغيير اليوزر وكلمة المرور</p>
                         </div>
                         <div class="class-card-arrow" style="margin-right:auto;">›</div>
                     </div>
@@ -630,6 +641,97 @@ const AdminView = {
             await Store.deleteGame(id);
             showToast('تم الحذف!', 'success');
             await this.renderManageGames();
+        }
+    },
+
+    // ── ADMIN SETTINGS ────────────────────────────────────────────────
+    async renderAdminSettings() {
+        const admin = Auth.currentUser;
+        App.mainContent.innerHTML = `
+            <div class="fade-in">
+                <button class="btn btn-ghost btn-sm mb-2" onclick="AdminView.renderDashboard()">‹ عودة</button>
+                <div class="section-title mb-3">🔐 إعدادات حساب الأدمن</div>
+
+                <!-- Change Username -->
+                <div class="card mb-3" style="padding:1.5rem;">
+                    <h3 style="color:var(--primary); margin-bottom:1.25rem;">👤 تغيير اليوزر</h3>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight:800;">اليوزر الحالي</label>
+                        <input type="text" class="form-input" value="${admin.username}" disabled style="opacity:0.6;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight:800;">اليوزر الجديد</label>
+                        <input type="text" id="new-username" class="form-input" placeholder="اكتب اليوزر الجديد" autocapitalize="none">
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="AdminView.changeAdminUsername()">💾 حفظ اليوزر</button>
+                </div>
+
+                <!-- Change Password -->
+                <div class="card" style="padding:1.5rem;">
+                    <h3 style="color:var(--primary); margin-bottom:1.25rem;">🔑 تغيير كلمة المرور</h3>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight:800;">كلمة المرور الحالية</label>
+                        <input type="password" id="current-password" class="form-input" placeholder="كلمة المرور الحالية">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight:800;">كلمة المرور الجديدة</label>
+                        <input type="password" id="new-password" class="form-input" placeholder="كلمة المرور الجديدة">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight:800;">تأكيد كلمة المرور</label>
+                        <input type="password" id="confirm-password" class="form-input" placeholder="أعد إدخال كلمة المرور الجديدة">
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="AdminView.changeAdminPassword()">💾 حفظ كلمة المرور</button>
+                </div>
+            </div>
+        `;
+    },
+
+    async changeAdminUsername() {
+        const newUsername = document.getElementById('new-username').value.trim();
+        if (!newUsername) { showToast('أدخل اليوزر الجديد', 'error'); return; }
+        if (newUsername === Auth.currentUser.username) { showToast('اليوزر نفس القديم!', 'error'); return; }
+
+        // Check if username already taken
+        const existing = await Store.getUser(newUsername);
+        if (existing) { showToast('هذا اليوزر مستخدم مسبقاً!', 'error'); return; }
+
+        const btn = document.querySelector('.card .btn-primary');
+        if (btn) btn.textContent = '⏳';
+
+        const updated = await Store.updateUser(Auth.currentUser.id, { username: newUsername });
+        if (updated) {
+            Auth.currentUser = updated;
+            sessionStorage.setItem('fl_currentUser', JSON.stringify(updated));
+            showToast('✅ تم تغيير اليوزر بنجاح!', 'success');
+            await this.renderAdminSettings();
+        } else {
+            showToast('حدث خطأ أثناء الحفظ', 'error');
+            if (btn) btn.textContent = '💾 حفظ اليوزر';
+        }
+    },
+
+    async changeAdminPassword() {
+        const currentPass   = document.getElementById('current-password').value;
+        const newPass       = document.getElementById('new-password').value;
+        const confirmPass   = document.getElementById('confirm-password').value;
+
+        if (!currentPass || !newPass || !confirmPass) { showToast('اكمل جميع الحقول', 'error'); return; }
+        if (currentPass !== Auth.currentUser.password) { showToast('كلمة المرور الحالية غلط!', 'error'); return; }
+        if (newPass !== confirmPass) { showToast('كلمتا المرور ما تطابقتا!', 'error'); return; }
+        if (newPass.length < 6) { showToast('كلمة المرور لازم تكون 6 أحرف على الأقل', 'error'); return; }
+
+        const btns = document.querySelectorAll('.card .btn-primary');
+        btns.forEach(b => b.textContent = '⏳');
+
+        const updated = await Store.updateUser(Auth.currentUser.id, { password: newPass });
+        if (updated) {
+            Auth.currentUser = updated;
+            sessionStorage.setItem('fl_currentUser', JSON.stringify(updated));
+            showToast('✅ تم تغيير كلمة المرور بنجاح!', 'success');
+            await this.renderAdminSettings();
+        } else {
+            showToast('حدث خطأ أثناء الحفظ', 'error');
         }
     },
 
