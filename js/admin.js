@@ -165,6 +165,12 @@ const AdminView = {
                                 <div style="font-weight: 900; font-size: 1.05rem; color: var(--text);">${s.avatar || '👤'} ${s.username}</div>
                                 <div style="font-size: 0.82rem; color: var(--muted-light); font-weight: 700;">🏫 ${className} &nbsp;·&nbsp; ⚡ ${s.xp || 0} XP &nbsp;·&nbsp; 🪙 ${s.coins || 0}</div>
                                 <div style="font-size: 0.78rem; color: var(--text-muted);">${s.email}</div>
+                                <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.3rem;">
+                                    <span style="font-size:0.75rem; color:var(--muted-light); font-weight:700;">🔑</span>
+                                    <span id="pwd-${s.id}" style="font-size:0.78rem; font-family:monospace; color:var(--text); letter-spacing:0.05em; display:none;">${s.password || '—'}</span>
+                                    <span id="pwd-dots-${s.id}" style="font-size:0.78rem; color:var(--muted-light);">••••••</span>
+                                    <button onclick="AdminView.togglePwd('${s.id}')" style="background:none;border:none;cursor:pointer;font-size:0.85rem;padding:0;line-height:1;" title="إظهار/إخفاء كلمة المرور" id="pwd-eye-${s.id}">👁️</button>
+                                </div>
                                 ${isPending ? `<div style="color:var(--gold);font-weight:bold;font-size:0.8rem;margin-top:0.2rem;">⏳ بانتظار الموافقة</div>` : '<div style="color:var(--green);font-size:0.78rem;margin-top:0.2rem;">✅ نشط</div>'}
                             </div>
                         </div>
@@ -173,6 +179,7 @@ const AdminView = {
                             <button class="btn btn-secondary btn-sm" onclick="AdminView.showEditStudent('${s.id}')">✏️ تعديل</button>
                             <button class="btn btn-danger btn-sm" onclick="AdminView.deleteStudent('${s.id}')">حذف</button>
                         </div>
+
                     </div>
                 `;
             });
@@ -257,6 +264,17 @@ const AdminView = {
             showToast('تم حذف الطالب.', 'success');
             await this.renderManageStudents();
         }
+    },
+
+    togglePwd(id) {
+        const pwdEl   = document.getElementById(`pwd-${id}`);
+        const dotsEl  = document.getElementById(`pwd-dots-${id}`);
+        const eyeBtn  = document.getElementById(`pwd-eye-${id}`);
+        if (!pwdEl || !dotsEl) return;
+        const isHidden = pwdEl.style.display === 'none';
+        pwdEl.style.display  = isHidden ? 'inline' : 'none';
+        dotsEl.style.display = isHidden ? 'none'   : 'inline';
+        if (eyeBtn) eyeBtn.textContent = isHidden ? '🙈' : '👁️';
     },
 
     // ── CLASSES & HOMEWORKS ───────────────────────────────────────────
