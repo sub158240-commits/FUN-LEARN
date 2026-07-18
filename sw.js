@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fl-cache-v2';
+const CACHE_NAME = 'fl-cache-v3';
 const URLS_TO_CACHE = [
   './',
   './index.html',
@@ -12,16 +12,13 @@ const URLS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // تفعيل فوري بدون انتظار
+  self.skipWaiting(); // تفعيل فوري
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(URLS_TO_CACHE);
-      })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(URLS_TO_CACHE))
   );
 });
 
-// حذف الكاش القديم تلقائياً
+// حذف الكاش القديم
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -34,15 +31,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// استراتيجية Network First (جلب الجديد من الإنترنت، وإذا فشل استخدم الكاش)
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached response if found
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
+    fetch(event.request)
+      .then((networkResponse) => {
+        // تحديث الكاش بالنسخة الجديدة
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, networkResponse.clone());
+          return networkResponse;
+        });
+      })
+      .catch(() => {
+        // في حال عدم وجود إنترنت، استخدم الكاش
+        return caches.match(event.request);
       })
   );
 });
