@@ -1,12 +1,13 @@
 -- ========================================================
---  FUN & LEARN - إعداد قاعدة البيانات الجديدة
+--  FUN & LEARN - إعداد قاعدة البيانات الجديدة (النسخة المصححة)
 --  شغّل هذا الكود كاملاً في Supabase SQL Editor
 -- ========================================================
 
--- 1. جدول الصفوف (classes)
+-- 1. جدول الصفوف (classes) — يحتوي على icon
 CREATE TABLE IF NOT EXISTS classes (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name TEXT NOT NULL,
+    icon TEXT DEFAULT '📚',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -27,13 +28,13 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. جدول الواجبات (homework)
+-- 3. جدول الواجبات (homework) — due_date كـ TIMESTAMPTZ لدعم التاريخ والوقت
 CREATE TABLE IF NOT EXISTS homework (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     link TEXT,
     class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
-    due_date DATE DEFAULT NULL,
+    due_date TIMESTAMPTZ DEFAULT NULL,
     responses_link TEXT DEFAULT NULL,
     added_date TIMESTAMPTZ DEFAULT NOW()
 );
@@ -92,16 +93,15 @@ VALUES (
 ON CONFLICT (username) DO NOTHING;
 
 -- ========================================================
---  تفعيل Row Level Security (RLS) والسماح للجميع بالقراءة والكتابة
---  (مناسب للمشاريع التعليمية البسيطة)
+--  تفعيل Row Level Security (RLS)
 -- ========================================================
-ALTER TABLE classes        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE homework       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE classes          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE homework         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE homework_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE games          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE game_results   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_items     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE games            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE game_results     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_items       ENABLE ROW LEVEL SECURITY;
 
 -- السماح بكل العمليات للجميع (anon + authenticated)
 CREATE POLICY "Allow all" ON classes          FOR ALL USING (true) WITH CHECK (true);
@@ -111,6 +111,12 @@ CREATE POLICY "Allow all" ON homework_results FOR ALL USING (true) WITH CHECK (t
 CREATE POLICY "Allow all" ON games            FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON game_results     FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON user_items       FOR ALL USING (true) WITH CHECK (true);
+
+-- ========================================================
+--  إذا شغّلت SQL من قبل وعندك جداول موجودة، شغّل هذا:
+-- ========================================================
+-- ALTER TABLE classes ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '📚';
+-- ALTER TABLE homework ALTER COLUMN due_date TYPE TIMESTAMPTZ USING due_date::TIMESTAMPTZ;
 
 -- ========================================================
 --  تم! 🎉
