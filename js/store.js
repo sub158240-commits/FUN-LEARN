@@ -1,6 +1,6 @@
 // store.js
-const supabaseUrl = 'https://afpboagnlguyxrctjtmi.supabase.co';
-const supabaseKey = 'sb_publishable_IMapblFgo2WBHsgtZI4sUQ_aZuBhAYB';
+const supabaseUrl = 'https://lgcnsoorqfdcnyfipwwj.supabase.co';
+const supabaseKey = 'sb_publishable_bQkAOE7ii7ZNKlDETUaJ4g_AUCM229n';
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 // Utility to map snake_case to camelCase
