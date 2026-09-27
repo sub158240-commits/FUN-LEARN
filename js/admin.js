@@ -53,7 +53,7 @@ const AdminView = {
                         <div style="font-size:2rem;">📚</div>
                         <div>
                             <h3 style="color: var(--primary); margin:0 0 0.2rem;">الصفوف والواجبات</h3>
-                            <p class="text-muted" style="font-size: 0.85rem; margin:0;">إدارة الصفوف، إضافة واجبات Google Forms</p>
+                            <p class="text-muted" style="font-size: 0.85rem; margin:0;">إنشاء واجبات بأسئلة داخلية، تصحيح تلقائي، تقارير مفصلة</p>
                         </div>
                         <div class="class-card-arrow" style="margin-right:auto;">›</div>
                     </div>
@@ -133,12 +133,41 @@ const AdminView = {
         const users = await Store.getUsers();
         const classes = await Store.getClasses();
         const students = users.filter(u => u.role === 'student');
+        const pendingStudents = students.filter(s => s.status === 'pending');
+        const activeStudents = students.filter(s => s.status === 'active');
+
+        // Build class counts map
+        const classCounts = {};
+        classes.forEach(c => { classCounts[c.id] = { name: c.name, icon: c.icon || '📚', count: 0 }; });
+        activeStudents.forEach(s => { if (s.classId && classCounts[s.classId]) classCounts[s.classId].count++; });
+
+        let currentFilter = AdminView.currentStudentFilter || 'all';
 
         let html = `
             <div class="fade-in">
                 <button class="btn btn-ghost btn-sm mb-2" onclick="AdminView.renderDashboard()">‹ عودة</button>
-                <div class="section-title mb-2">إدارة الطلاب</div>
+                <div class="section-title mb-2">إدارة الطلاب 👨‍🎓</div>
 
+                <!-- Class distribution summary -->
+                <div class="card mb-3" style="padding:1.25rem; background:linear-gradient(135deg,var(--primary-light,rgba(79,70,229,0.08)),var(--surface))">
+                    <div style="font-weight:900; font-size:0.95rem; margin-bottom:0.75rem; color:var(--primary);">📊 توزيع الطلاب حسب الصف</div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:0.5rem;">
+                        ${Object.values(classCounts).map(c => `
+                            <div style="background:var(--surface-2); border-radius:var(--r-md); padding:0.6rem; text-align:center; border:1px solid var(--border);">
+                                <div style="font-size:1.4rem;">${c.icon}</div>
+                                <div style="font-size:1.4rem; font-weight:900; color:var(--primary);">${c.count}</div>
+                                <div style="font-size:0.72rem; color:var(--muted-light); font-weight:700;">${c.name}</div>
+                            </div>
+                        `).join('')}
+                        <div style="background:var(--surface-2); border-radius:var(--r-md); padding:0.6rem; text-align:center; border:1px solid var(--border);">
+                            <div style="font-size:1.4rem;">❓</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:var(--text);">${students.filter(s=>!s.classId && s.status==='active').length}</div>
+                            <div style="font-size:0.72rem; color:var(--muted-light); font-weight:700;">غير محدد</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk move -->
                 <div class="card mb-3" style="padding: 1rem; background: var(--surface-2);">
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
                         <select id="bulk-move-class" class="form-input" style="flex:1;">
@@ -150,40 +179,103 @@ const AdminView = {
                 </div>
         `;
 
-        if (students.length === 0) {
-            html += `<div class="empty-state"><div class="empty-state-icon">👨‍🎓</div><div class="empty-state-title">لا يوجد طلاب مسجلين بعد</div></div>`;
-        } else {
-            students.forEach(s => {
+        // ── Filter UI ──
+        html += `
+            <div style="margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">
+                <label style="font-weight:bold; color:var(--text);">عرض طلاب:</label>
+                <select class="form-input" style="max-width:250px;" onchange="AdminView.currentStudentFilter = this.value; AdminView.renderManageStudents()">
+                    <option value="all" ${currentFilter === 'all' ? 'selected' : ''}>الكل (جميع الطلاب)</option>
+                    ${classes.map(c => `<option value="${c.id}" ${currentFilter === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                    <option value="__none__" ${currentFilter === '__none__' ? 'selected' : ''}>غير محدد</option>
+                </select>
+            </div>
+        `;
+
+        // ── Pending students first ──
+        const filteredPending = currentFilter === 'all' ? pendingStudents : pendingStudents.filter(s => (s.classId || '__none__') === currentFilter);
+        if (filteredPending.length > 0) {
+            html += `<div style="font-weight:900; color:var(--gold); margin-bottom:0.5rem; font-size:0.9rem;">⏳ بانتظار الموافقة (${filteredPending.length})</div>`;
+            filteredPending.forEach(s => {
                 const cls = classes.find(c => c.id === s.classId);
                 const className = cls ? cls.name : 'غير محدد';
-                const isPending = s.status === 'pending';
                 html += `
-                    <div class="card mb-2" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; ${isPending ? 'border-color: var(--gold); border-bottom-color: #B45309;' : ''}">
+                    <div class="card mb-2" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-color: var(--gold); border-bottom-color: #B45309;">
                         <div style="display: flex; align-items: center; gap: 1rem;">
                             <input type="checkbox" class="student-checkbox" value="${s.id}" style="width:18px;height:18px;cursor:pointer;">
                             <div>
                                 <div style="font-weight: 900; font-size: 1.05rem; color: var(--text);">${s.avatar || '👤'} ${s.username}</div>
-                                <div style="font-size: 0.82rem; color: var(--muted-light); font-weight: 700;">🏫 ${className} &nbsp;·&nbsp; ⚡ ${s.xp || 0} XP &nbsp;·&nbsp; 🪙 ${s.coins || 0}</div>
+                                <div style="font-size: 0.82rem; color: var(--muted-light); font-weight: 700;">🏫 ${className}</div>
                                 <div style="font-size: 0.78rem; color: var(--text-muted);">${s.email}</div>
-                                <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.3rem;">
-                                    <span style="font-size:0.75rem; color:var(--muted-light); font-weight:700;">🔑</span>
-                                    <span id="pwd-${s.id}" style="font-size:0.78rem; font-family:monospace; color:var(--text); letter-spacing:0.05em; display:none;">${s.password || '—'}</span>
-                                    <span id="pwd-dots-${s.id}" style="font-size:0.78rem; color:var(--muted-light);">••••••</span>
-                                    <button onclick="AdminView.togglePwd('${s.id}')" style="background:none;border:none;cursor:pointer;font-size:0.85rem;padding:0;line-height:1;" title="إظهار/إخفاء كلمة المرور" id="pwd-eye-${s.id}">👁️</button>
-                                </div>
-                                ${isPending ? `<div style="color:var(--gold);font-weight:bold;font-size:0.8rem;margin-top:0.2rem;">⏳ بانتظار الموافقة</div>` : '<div style="color:var(--green);font-size:0.78rem;margin-top:0.2rem;">✅ نشط</div>'}
+                                <div style="color:var(--gold);font-weight:bold;font-size:0.8rem;margin-top:0.2rem;">⏳ بانتظار الموافقة</div>
                             </div>
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-                            ${isPending ? `<button class="btn btn-success btn-sm" onclick="AdminView.approveStudent('${s.id}')">موافقة ✓</button>` : ''}
+                            <button class="btn btn-success btn-sm" onclick="AdminView.approveStudent('${s.id}')">موافقة ✓</button>
                             <button class="btn btn-secondary btn-sm" onclick="AdminView.showEditStudent('${s.id}')">✏️ تعديل</button>
                             <button class="btn btn-danger btn-sm" onclick="AdminView.deleteStudent('${s.id}')">حذف</button>
                         </div>
-
                     </div>
                 `;
             });
         }
+
+        // ── Active students grouped by class ──
+        if (activeStudents.length > 0) {
+            html += `<div style="font-weight:900; color:var(--text); margin:0.75rem 0 0.5rem; font-size:0.9rem;">✅ الطلاب النشطون — مرتبون حسب الصف</div>`;
+
+            // Group by class
+            const groups = {}; // classId -> {name, icon, students[]}
+            activeStudents.forEach(s => {
+                const key = s.classId || '__none__';
+                if (!groups[key]) {
+                    const cls = classes.find(c => c.id === s.classId);
+                    groups[key] = { name: cls ? cls.name : 'غير محدد', icon: cls ? (cls.icon || '📚') : '❓', students: [] };
+                }
+                groups[key].students.push(s);
+            });
+
+            for (const [groupKey, group] of Object.entries(groups)) {
+                if (currentFilter !== 'all' && groupKey !== currentFilter) continue;
+                html += `
+                    <div style="background:var(--primary); color:white; border-radius:var(--r-md); padding:0.5rem 1rem; margin-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+                        <span style="font-size:1.2rem;">${group.icon}</span>
+                        <span style="font-weight:900;">${group.name}</span>
+                        <span style="margin-right:auto; background:rgba(255,255,255,0.2); border-radius:100px; padding:0.1rem 0.5rem; font-size:0.85rem;">${group.students.length} طالب</span>
+                    </div>
+                `;
+                group.students.forEach(s => {
+                    const cls = classes.find(c => c.id === s.classId);
+                    const className = cls ? cls.name : 'غير محدد';
+                    html += `
+                        <div class="card mb-2" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <input type="checkbox" class="student-checkbox" value="${s.id}" style="width:18px;height:18px;cursor:pointer;">
+                                <div>
+                                    <div style="font-weight: 900; font-size: 1.05rem; color: var(--text);">${s.avatar || '👤'} ${s.username}</div>
+                                    <div style="font-size: 0.82rem; color: var(--muted-light); font-weight: 700;">⚡ ${s.xp || 0} XP &nbsp;·&nbsp; 🪙 ${s.coins || 0}</div>
+                                    <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.3rem;">
+                                        <span style="font-size:0.75rem; color:var(--muted-light); font-weight:700;">🔑</span>
+                                        <span id="pwd-${s.id}" style="font-size:0.78rem; font-family:monospace; color:var(--text); letter-spacing:0.05em; display:none;">${s.password || '—'}</span>
+                                        <span id="pwd-dots-${s.id}" style="font-size:0.78rem; color:var(--muted-light);">••••••</span>
+                                        <button onclick="AdminView.togglePwd('${s.id}')" style="background:none;border:none;cursor:pointer;font-size:0.85rem;padding:0;line-height:1;" id="pwd-eye-${s.id}">👁️</button>
+                                    </div>
+                                    <div style="color:var(--green);font-size:0.78rem;margin-top:0.2rem;">✅ نشط</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                                <button class="btn btn-secondary btn-sm" onclick="AdminView.showEditStudent('${s.id}')">✏️ تعديل</button>
+                                <button class="btn btn-danger btn-sm" onclick="AdminView.deleteStudent('${s.id}')">حذف</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        if (students.length === 0) {
+            html += `<div class="empty-state"><div class="empty-state-icon">👨‍🎓</div><div class="empty-state-title">لا يوجد طلاب مسجلين بعد</div></div>`;
+        }
+
         html += `</div>`;
         App.mainContent.innerHTML = html;
     },
@@ -284,12 +376,12 @@ const AdminView = {
         let html = `
             <div class="fade-in">
                 <button class="btn btn-ghost btn-sm mb-2" onclick="AdminView.renderDashboard()">‹ عودة</button>
-                <div class="section-title mb-2">الصفوف والواجبات</div>
+                <div class="section-title mb-2">الصفوف والواجبات 📚</div>
 
                 <div class="card mb-3">
                     <form id="add-class-form" onsubmit="AdminView.addClass(event)">
                         <div class="form-group">
-                            <input type="text" id="new-class-name" class="form-input" placeholder="اسم الصف الجديد (مثال: الصف الثامن)" required>
+                            <input type="text" id="new-class-name" class="form-input" placeholder="اسم الصف الجديد (مثال: الصف الخامس)" required>
                         </div>
                         <button class="btn btn-primary btn-block" type="submit">إضافة صف 🏫</button>
                     </form>
@@ -299,30 +391,41 @@ const AdminView = {
 
         for (const cls of classes) {
             const hws = await Store.getHomeworkByClass(cls.id);
+            const users = await Store.getUsers();
+            const classStudentCount = users.filter(u => u.role === 'student' && u.status === 'active' && u.classId === cls.id).length;
             let hwsHtml = '';
             for (const hw of hws) {
                 const results = await Store.getHomeworkResultsByHw(hw.id);
                 const dueStr = hw.dueDate ? new Date(hw.dueDate).toLocaleString('ar-SA') : 'مفتوح';
                 const isExpired = hw.dueDate && new Date() > new Date(hw.dueDate);
+                const isQuiz = hw.hwType === 'quiz';
+                // Avg score for quiz type
+                let avgHtml = '';
+                if (isQuiz && results.length > 0) {
+                    const avgScore = (results.reduce((s, r) => s + (r.total > 0 ? r.score / r.total * 100 : 0), 0) / results.length).toFixed(0);
+                    const avgColor = avgScore >= 70 ? 'var(--green)' : avgScore >= 40 ? 'var(--gold)' : 'var(--red)';
+                    avgHtml = `<div style="font-size:0.78rem; color:${avgColor}; font-weight:800;">📊 متوسط الدرجات: ${avgScore}%</div>`;
+                }
                 hwsHtml += `
                     <div style="background:var(--surface-2); border-radius:var(--r-md); padding:0.75rem 1rem; margin-bottom:0.75rem; border:1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem;">
                             <div>
-                                <div style="font-weight:800; font-size:0.95rem;">📝 ${hw.title}</div>
+                                <div style="font-weight:800; font-size:0.95rem;">${isQuiz ? '📋' : '📝'} ${hw.title} <span style="font-size:0.7rem; background:${isQuiz ? 'var(--primary)' : 'var(--green)'}; color:white; border-radius:100px; padding:0.1rem 0.4rem;">${isQuiz ? 'واجب داخلي' : 'Google Forms'}</span></div>
                                 <div style="font-size:0.78rem; color:var(--muted-light);">الانتهاء: <span style="${isExpired ? 'color:var(--red);font-weight:bold;' : ''}">${dueStr}</span></div>
-                                <div style="font-size:0.78rem; color:var(--green); margin-top:0.2rem;">✅ أكمل الواجب: ${results.length} طالب</div>
+                                <div style="font-size:0.78rem; color:var(--green); margin-top:0.2rem;">✅ أكمل الواجب: ${results.length} من ${classStudentCount} طالب</div>
+                                ${avgHtml}
                             </div>
                             <div style="display:flex; flex-direction:column; gap:0.3rem; align-items:flex-end;">
                                 <button class="btn btn-danger btn-sm" style="padding:0.2rem 0.5rem; font-size:0.78rem;" onclick="AdminView.deleteHomework('${hw.id}')">حذف</button>
-                                <button class="btn btn-ghost btn-sm" style="padding:0.2rem 0.5rem; font-size:0.78rem;" onclick="AdminView.showHomeworkDetails('${hw.id}')">📊 التفاصيل</button>
-                                ${hw.responsesLink ? `<a href="${hw.responsesLink}" target="_blank" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.5rem; font-size:0.78rem; text-decoration:none;">📋 نتائج الفورم</a>` : ''}
+                                <button class="btn btn-primary btn-sm" style="padding:0.2rem 0.5rem; font-size:0.78rem;" onclick="AdminView.showHomeworkDetails('${hw.id}', ${isQuiz})">📊 التفاصيل</button>
+                                ${!isQuiz && hw.responsesLink ? `<a href="${hw.responsesLink}" target="_blank" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.5rem; font-size:0.78rem; text-decoration:none;">📋 نتائج الفورم</a>` : ''}
                             </div>
                         </div>
-                        <!-- Inline Google Forms viewer -->
+                        ${!isQuiz && hw.link ? `
                         <div style="display:none;" id="hw-preview-${hw.id}">
                             <iframe src="${hw.link}" style="width:100%;height:400px;border:none;border-radius:var(--r-sm);margin-top:0.5rem;" allowfullscreen></iframe>
                         </div>
-                        <button class="btn btn-ghost btn-sm" style="font-size:0.78rem; width:100%; margin-top:0.3rem;" onclick="AdminView.toggleHwPreview('${hw.id}')">👁️ معاينة الفورم</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size:0.78rem; width:100%; margin-top:0.3rem;" onclick="AdminView.toggleHwPreview('${hw.id}')">👁️ معاينة الفورم</button>` : ''}
                     </div>
                 `;
             }
@@ -330,7 +433,10 @@ const AdminView = {
             html += `
                 <div class="card mb-3" style="padding: 1.5rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 1rem;">
-                        <span style="font-size: 1.2rem; font-weight: 900; color: var(--text);">${cls.icon || '📚'} ${cls.name}</span>
+                        <div>
+                            <span style="font-size: 1.2rem; font-weight: 900; color: var(--text);">${cls.icon || '📚'} ${cls.name}</span>
+                            <span style="margin-right:0.5rem; font-size:0.82rem; color:var(--muted-light);">👨‍🎓 ${classStudentCount} طالب</span>
+                        </div>
                         <button class="btn btn-danger btn-sm" onclick="AdminView.deleteClass('${cls.id}')">حذف الصف</button>
                     </div>
 
@@ -339,8 +445,35 @@ const AdminView = {
                         ${hws.length === 0 ? '<p class="text-muted" style="font-size:0.9rem;">لا توجد واجبات مضافة.</p>' : hwsHtml}
                     </div>
 
-                    <div style="background: var(--surface-2); padding: 1.25rem; border-radius: var(--r-md); border: 2px dashed var(--border-2);">
-                        <h4 class="mb-1" style="color: var(--primary);">+ إضافة واجب (Google Forms)</h4>
+                    <!-- Tab switcher for homework type -->
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem;">
+                        <button class="btn btn-primary btn-sm" style="flex:1;" onclick="AdminView.showAddQuizHw('${cls.id}')">📋 + واجب داخلي (أسئلة)</button>
+                        <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="AdminView.showAddFormHw('${cls.id}')">📝 + Google Forms</button>
+                    </div>
+
+                    <!-- Quiz homework builder -->
+                    <div id="add-quiz-hw-${cls.id}" style="background: var(--surface-2); padding: 1.25rem; border-radius: var(--r-md); border: 2px dashed var(--primary); display:none;">
+                        <h4 class="mb-2" style="color: var(--primary);">📋 إضافة واجب بأسئلة داخلية</h4>
+                        <form onsubmit="AdminView.addQuizHomework(event, '${cls.id}')">
+                            <div class="form-group">
+                                <input type="text" id="qhw-title-${cls.id}" class="form-input" placeholder="عنوان الواجب" required>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size:0.85rem; color:var(--muted-light); display:block; margin-bottom:0.25rem;">تاريخ انتهاء الواجب (اختياري)</label>
+                                <input type="datetime-local" id="qhw-due-${cls.id}" class="form-input">
+                            </div>
+                            <div id="qhw-questions-${cls.id}" class="mb-2"></div>
+                            <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+                                <button type="button" class="btn btn-ghost btn-sm btn-block" onclick="AdminView.addQuizHwQuestion('text', '${cls.id}')">+ سؤال كتابي</button>
+                                <button type="button" class="btn btn-ghost btn-sm btn-block" onclick="AdminView.addQuizHwQuestion('mcq', '${cls.id}')">+ سؤال اختياري</button>
+                            </div>
+                            <button class="btn btn-primary btn-block btn-sm" type="submit">حفظ الواجب ✅</button>
+                        </form>
+                    </div>
+
+                    <!-- Google Forms homework form -->
+                    <div id="add-form-hw-${cls.id}" style="background: var(--surface-2); padding: 1.25rem; border-radius: var(--r-md); border: 2px dashed var(--border-2); display:none;">
+                        <h4 class="mb-1" style="color: var(--primary);">📝 إضافة واجب (Google Forms)</h4>
                         <form onsubmit="AdminView.addHomework(event, '${cls.id}')">
                             <div class="form-group">
                                 <input type="text" id="hw-title-${cls.id}" class="form-input" placeholder="عنوان الواجب" required>
@@ -349,7 +482,7 @@ const AdminView = {
                                 <input type="url" id="hw-url-${cls.id}" class="form-input" placeholder="رابط Google Forms للتضمين (Embed URL)" required>
                             </div>
                             <div class="form-group">
-                                <input type="url" id="hw-resp-${cls.id}" class="form-input" placeholder="رابط نتائج الفورم (اختياري - Spreadsheet أو Responses)">
+                                <input type="url" id="hw-resp-${cls.id}" class="form-input" placeholder="رابط نتائج الفورم (اختياري)">
                             </div>
                             <div class="form-group">
                                 <label style="font-size:0.85rem; color:var(--muted-light); display:block; margin-bottom:0.25rem;">تاريخ انتهاء الواجب (اختياري)</label>
@@ -365,20 +498,151 @@ const AdminView = {
         App.mainContent.innerHTML = html;
     },
 
+    showAddQuizHw(classId) {
+        const quizDiv = document.getElementById(`add-quiz-hw-${classId}`);
+        const formDiv = document.getElementById(`add-form-hw-${classId}`);
+        if (quizDiv) { quizDiv.style.display = quizDiv.style.display === 'none' ? 'block' : 'none'; }
+        if (formDiv) formDiv.style.display = 'none';
+        // Add first question if empty
+        const container = document.getElementById(`qhw-questions-${classId}`);
+        if (container && container.children.length === 0) AdminView.addQuizHwQuestion('mcq', classId);
+    },
+
+    showAddFormHw(classId) {
+        const quizDiv = document.getElementById(`add-quiz-hw-${classId}`);
+        const formDiv = document.getElementById(`add-form-hw-${classId}`);
+        if (formDiv) { formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none'; }
+        if (quizDiv) quizDiv.style.display = 'none';
+    },
+
+    addQuizHwQuestion(type, classId) {
+        const container = document.getElementById(`qhw-questions-${classId}`);
+        if (!container) return;
+        const div = document.createElement('div');
+        div.className = 'question-row card';
+        div.style.cssText = 'padding:1rem; margin-bottom:0.75rem; border:1px solid var(--border);';
+        div.dataset.type = type;
+        let inner = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
+                <h4 style="margin:0; font-size:0.95rem; color:var(--text-2);">${type === 'text' ? '📝 سؤال كتابي' : '🔘 سؤال اختياري'}</h4>
+                <button type="button" class="btn btn-danger btn-sm" style="padding:0.2rem 0.5rem; font-size:0.75rem;" onclick="this.parentElement.parentElement.remove()">✕</button>
+            </div>
+            <div class="form-group">
+                <input type="text" class="form-input q-text" placeholder="اكتب السؤال هنا..." required>
+            </div>
+            <div class="form-group mb-2">
+                <input type="url" class="form-input q-img" placeholder="رابط صورة توضيحية للسؤال (اختياري)">
+            </div>
+        `;
+        if (type === 'text') {
+            inner += `<div class="form-group mb-0"><input type="text" class="form-input q-ans" placeholder="الإجابة الصحيحة" required></div>`;
+        } else {
+            inner += `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.5rem;">
+                    <input type="text" class="form-input q-opt" placeholder="الخيار الأول" required>
+                    <input type="text" class="form-input q-opt" placeholder="الخيار الثاني" required>
+                    <input type="text" class="form-input q-opt" placeholder="الخيار الثالث" required>
+                    <input type="text" class="form-input q-opt" placeholder="الخيار الرابع" required>
+                </div>
+                <div class="form-group mb-0">
+                    <select class="form-input q-ans" required>
+                        <option value="" disabled selected>اختر الإجابة الصحيحة...</option>
+                        <option value="0">الخيار الأول</option>
+                        <option value="1">الخيار الثاني</option>
+                        <option value="2">الخيار الثالث</option>
+                        <option value="3">الخيار الرابع</option>
+                    </select>
+                </div>
+            `;
+        }
+        div.innerHTML = inner;
+        container.appendChild(div);
+    },
+
+    async addQuizHomework(e, classId) {
+        e.preventDefault();
+        const title = document.getElementById(`qhw-title-${classId}`).value.trim();
+        const dueDate = document.getElementById(`qhw-due-${classId}`).value;
+        const rows = document.querySelectorAll(`#qhw-questions-${classId} .question-row`);
+        if (rows.length === 0) { showToast('يجب إضافة سؤال واحد على الأقل!', 'error'); return; }
+        const questions = [];
+        let valid = true;
+        rows.forEach(r => {
+            const type = r.dataset.type;
+            const qText = r.querySelector('.q-text').value.trim();
+            const qImg = r.querySelector('.q-img') ? r.querySelector('.q-img').value.trim() : '';
+            
+            let qObj = { type, q: qText };
+            if (qImg) qObj.img = qImg;
+            
+            if (type === 'text') {
+                qObj.a = r.querySelector('.q-ans').value.trim();
+                questions.push(qObj);
+            } else {
+                const opts = Array.from(r.querySelectorAll('.q-opt')).map(inp => inp.value.trim());
+                const ansIdx = r.querySelector('.q-ans').value;
+                if (!ansIdx) { valid = false; }
+                else {
+                    qObj.opts = opts;
+                    qObj.a = opts[parseInt(ansIdx)];
+                    questions.push(qObj);
+                }
+            }
+        });
+        if (!valid) { showToast('تأكد من اختيار الإجابة الصحيحة لكل سؤال.', 'error'); return; }
+        const btn = e.submitter;
+        btn.textContent = '⏳';
+        await Store.addHomework({ classId, title, hwType: 'quiz', questions, dueDate: dueDate || null });
+        showToast('تم إضافة الواجب بنجاح! ✅', 'success');
+        await this.renderManageClasses();
+    },
+
     toggleHwPreview(hwId) {
         const el = document.getElementById(`hw-preview-${hwId}`);
         if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
     },
 
-    async showHomeworkDetails(hwId) {
+    async showHomeworkDetails(hwId, isQuiz) {
         const results = await Store.getHomeworkResultsByHw(hwId);
+        const hw = await Store.getHomeworkById(hwId);
         const old = document.getElementById('hw-details-modal');
         if (old) old.remove();
         const modal = document.createElement('div');
         modal.id = 'hw-details-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:99998; display:flex; align-items:center; justify-content:center; padding:1rem;';
-        let listHtml = results.length === 0 ? '<p class="text-muted text-center">لم يُسلّم أي طالب بعد.</p>' :
-            results.map(r => `
+
+        let listHtml = '';
+        if (results.length === 0) {
+            listHtml = '<p class="text-muted text-center" style="padding:2rem 0;">لم يُسلّم أي طالب بعد.</p>';
+        } else if (isQuiz && hw && hw.questions && hw.questions.length > 0) {
+            // Quiz type: show detailed results with score and wrong answers
+            listHtml = results.map(r => {
+                const pct = r.total > 0 ? Math.round(r.score / r.total * 100) : 0;
+                const barColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--gold)' : 'var(--red)';
+                
+                return `
+                    <div style="padding:0.75rem; background:var(--surface-2); border-radius:var(--r-sm); margin-bottom:0.75rem; border:1px solid var(--border);">
+                        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.4rem;">
+                            <span style="font-size:1.3rem;">${r.user?.avatar || '👤'}</span>
+                            <div style="flex:1;">
+                                <div style="font-weight:800;">${r.user?.username || 'غير معروف'}</div>
+                                <div style="font-size:0.75rem; color:var(--muted-light);">${new Date(r.createdAt).toLocaleString('ar-SA')}</div>
+                            </div>
+                            <div style="text-align:center;">
+                                <div style="font-weight:900; font-size:1.1rem; color:${barColor};">${r.score}/${r.total}</div>
+                                <div style="font-size:0.72rem; color:${barColor};">${pct}%</div>
+                            </div>
+                        </div>
+                        <div style="background:var(--surface); border-radius:100px; height:6px; overflow:hidden; margin-bottom:0.5rem;">
+                            <div style="background:${barColor}; width:${pct}%; height:100%; border-radius:100px;"></div>
+                        </div>
+                        <button class="btn btn-secondary btn-sm btn-block" onclick="AdminView.viewStudentPaper('${hwId}', '${r.userId}')">👁️ رؤية ورقة الواجب بالكامل</button>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            // Google Forms: just show who submitted
+            listHtml = results.map(r => `
                 <div style="display:flex; align-items:center; gap:0.75rem; padding:0.5rem; background:var(--surface-2); border-radius:var(--r-sm); margin-bottom:0.5rem;">
                     <span style="font-size:1.3rem;">${r.user?.avatar || '👤'}</span>
                     <div>
@@ -388,13 +652,42 @@ const AdminView = {
                     <div style="margin-right:auto; color:var(--green); font-weight:800;">✅ سلّم</div>
                 </div>
             `).join('');
+        }
+
+        // Summary stats for quiz
+        let summaryHtml = '';
+        if (isQuiz && results.length > 0) {
+            const avgScore = (results.reduce((s, r) => s + (r.total > 0 ? r.score / r.total * 100 : 0), 0) / results.length).toFixed(0);
+            const maxScore = Math.max(...results.map(r => r.total > 0 ? Math.round(r.score / r.total * 100) : 0));
+            const minScore = Math.min(...results.map(r => r.total > 0 ? Math.round(r.score / r.total * 100) : 0));
+            const color = avgScore >= 70 ? 'var(--green)' : avgScore >= 40 ? 'var(--gold)' : 'var(--red)';
+            summaryHtml = `
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.5rem; margin-bottom:1rem; text-align:center;">
+                    <div style="background:var(--surface-2); border-radius:var(--r-md); padding:0.6rem; border:1px solid var(--border);">
+                        <div style="font-size:1.2rem; font-weight:900; color:${color};">${avgScore}%</div>
+                        <div style="font-size:0.7rem; color:var(--muted-light);">المتوسط</div>
+                    </div>
+                    <div style="background:var(--surface-2); border-radius:var(--r-md); padding:0.6rem; border:1px solid var(--border);">
+                        <div style="font-size:1.2rem; font-weight:900; color:var(--green);">${maxScore}%</div>
+                        <div style="font-size:0.7rem; color:var(--muted-light);">الأعلى</div>
+                    </div>
+                    <div style="background:var(--surface-2); border-radius:var(--r-md); padding:0.6rem; border:1px solid var(--border);">
+                        <div style="font-size:1.2rem; font-weight:900; color:var(--red);">${minScore}%</div>
+                        <div style="font-size:0.7rem; color:var(--muted-light);">الأدنى</div>
+                    </div>
+                </div>`;
+        }
 
         modal.innerHTML = `
-            <div style="background:var(--surface); border-radius:var(--r-xl); padding:2rem; width:100%; max-width:420px; max-height:80vh; overflow-y:auto; border:3px solid var(--border); border-bottom:6px solid var(--border-2);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
-                    <h3 style="margin:0; color:var(--text);">📊 الطلاب الذين سلّموا (${results.length})</h3>
+            <div style="background:var(--surface); border-radius:var(--r-xl); padding:2rem; width:100%; max-width:480px; max-height:85vh; overflow-y:auto; border:3px solid var(--border); border-bottom:6px solid var(--border-2);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <div>
+                        <h3 style="margin:0 0 0.2rem; color:var(--text);">📊 تفاصيل الواجب</h3>
+                        <div style="font-size:0.82rem; color:var(--muted-light);">سلّم ${results.length} طالب</div>
+                    </div>
                     <button onclick="document.getElementById('hw-details-modal').remove()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--text);">✕</button>
                 </div>
+                ${summaryHtml}
                 ${listHtml}
             </div>
         `;
@@ -426,7 +719,7 @@ const AdminView = {
         const dueDate = document.getElementById(`hw-due-${classId}`).value;
         const btn = e.submitter;
         btn.textContent = '⏳';
-        await Store.addHomework({ classId, title, link, dueDate: dueDate || null, responsesLink: responsesLink || null });
+        await Store.addHomework({ classId, title, link, dueDate: dueDate || null, responsesLink: responsesLink || null, hwType: 'google_form' });
         showToast('تم إضافة الواجب بنجاح!', 'success');
         await this.renderManageClasses();
     },
@@ -836,6 +1129,82 @@ const AdminView = {
 
         html += `</div>`;
         App.mainContent.innerHTML = html;
+    },
+
+    async viewStudentPaper(hwId, userId) {
+        const hw = await Store.getHomeworkById(hwId);
+        const result = await Store.getHomeworkResultForUser(userId, hwId);
+        const user = await Store.getUserById(userId);
+        
+        if (!hw || !result || !user) return;
+        
+        const old = document.getElementById('student-paper-modal');
+        if (old) old.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'student-paper-modal';
+        modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:99999; display:flex; align-items:center; justify-content:center; padding:1rem;';
+        
+        let questionsHtml = hw.questions.map((q, idx) => {
+            const studentAns = (result.answers && result.answers[idx]) ? result.answers[idx] : '';
+            const isCorrect = studentAns.toString().trim().toLowerCase() === q.a.toString().trim().toLowerCase();
+            const color = isCorrect ? 'var(--green)' : 'var(--red)';
+            const icon = isCorrect ? '✅' : '❌';
+            
+            return `
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-md); padding:1rem; margin-bottom:1rem;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
+                    <span style="font-weight:bold; color:var(--text);">السؤال ${idx + 1}</span>
+                    <span style="font-size:1.2rem;">${icon}</span>
+                </div>
+                ${q.img ? `<div style="text-align:center; margin-bottom:0.5rem;"><img src="${q.img}" style="max-height:150px; border-radius:var(--r-sm);"></div>` : ''}
+                <div style="font-size:1.05rem; font-weight:800; color:var(--text-2); margin-bottom:1rem;">${q.q}</div>
+                
+                <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                    <div style="background:var(--surface); padding:0.75rem; border-radius:var(--r-sm); border:1px solid ${color};">
+                        <span style="font-size:0.8rem; color:var(--muted-light); display:block; margin-bottom:0.2rem;">إجابة الطالب:</span>
+                        <strong style="color:${color};">${studentAns || '(لم يجب)'}</strong>
+                    </div>
+                    ${!isCorrect ? `
+                    <div style="background:var(--surface); padding:0.75rem; border-radius:var(--r-sm); border:1px solid var(--green);">
+                        <span style="font-size:0.8rem; color:var(--muted-light); display:block; margin-bottom:0.2rem;">الإجابة الصحيحة:</span>
+                        <strong style="color:var(--green);">${q.a}</strong>
+                    </div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        
+        const pct = Math.round(result.score / result.total * 100);
+        const barColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--gold)' : 'var(--red)';
+
+        modal.innerHTML = `
+            <div style="background:var(--surface); border-radius:var(--r-xl); width:100%; max-width:600px; max-height:90vh; display:flex; flex-direction:column; border: 3px solid var(--border);">
+                <!-- Header -->
+                <div style="padding:1.5rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <h3 style="margin:0; color:var(--text); display:flex; align-items:center; gap:0.5rem;">
+                            <span>📄 ورقة إجابة: ${user.username}</span>
+                        </h3>
+                        <div style="font-size:0.85rem; color:var(--muted-light); margin-top:0.2rem;">${hw.title}</div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('student-paper-modal').remove()">✕ إغلاق</button>
+                </div>
+                
+                <!-- Body -->
+                <div style="padding:1.5rem; overflow-y:auto; flex:1;">
+                    <div style="text-align:center; margin-bottom:2rem;">
+                        <div style="font-size:2.5rem; font-weight:900; color:${barColor};">${result.score} / ${result.total}</div>
+                        <div style="background:var(--surface-2); border-radius:100px; height:8px; width:150px; overflow:hidden; margin:0.5rem auto;">
+                            <div style="background:${barColor}; width:${pct}%; height:100%; border-radius:100px;"></div>
+                        </div>
+                        <div style="font-size:1rem; font-weight:bold; color:${barColor};">${pct}%</div>
+                    </div>
+                    
+                    ${questionsHtml}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
     }
 };
 

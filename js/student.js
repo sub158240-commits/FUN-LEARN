@@ -173,20 +173,57 @@ const StudentView = {
     async renderHomework(hwId) {
         App.mainContent.innerHTML = '<div style="display:flex;justify-content:center;margin-top:4rem;"><div class="loader-circle"></div></div>';
         
-        // Use direct query since we added getHomeworkById
         let hw = await Store.getHomeworkById(hwId);
         if (!hw) return App.navigate('home');
         
         const isDone = await Store.hasCompletedHomework(Auth.currentUser.id, hwId);
         const isTimeUp = hw.dueDate && new Date() > new Date(hw.dueDate);
 
-        window.markHomeworkDone = async (btn) => {
-            if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
-            await Store.saveHomeworkResult(Auth.currentUser.id, hwId);
-            showToast('🎉 تم تسجيل تسليمك بنجاح! +10 عملات، +50 XP', 'success');
-            setTimeout(() => App.navigate('class/' + hw.classId), 1500);
-        };
+        // ── Quiz-type homework ──────────────────────────────────
+        if (hw.hwType === 'quiz' && hw.questions && hw.questions.length > 0) {
+            if (isTimeUp && !isDone) {
+                App.mainContent.innerHTML = `
+                <div class="fade-in">
+                    <button class="btn btn-ghost btn-sm mb-2" onclick="window.history.back()">‹ ${t('btnBack')}</button>
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏰</div>
+                        <div class="empty-state-title" style="color:var(--red);">انتهى الوقت!</div>
+                        <p class="text-muted" style="margin-top:0.5rem;">عذراً، انتهى الوقت المخصص لهذا الواجب.</p>
+                    </div>
+                </div>`;
+                return;
+            }
 
+            if (isDone) {
+                // Show already-submitted state with their score
+                const result = await Store.getHomeworkResultForUser(Auth.currentUser.id, hwId);
+                const pct = result && result.total > 0 ? Math.round(result.score / result.total * 100) : 0;
+                const barColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--gold)' : 'var(--red)';
+                App.mainContent.innerHTML = `
+                <div class="fade-in">
+                    <button class="btn btn-ghost btn-sm mb-2" onclick="window.history.back()">‹ ${t('btnBack')}</button>
+                    <h2 style="font-size:1.2rem; font-weight:900; margin-bottom:1rem;">${hw.title}</h2>
+                    <div style="background:rgba(34,197,94,0.1); border:2px solid var(--green); border-radius:var(--r-xl); padding:2rem; text-align:center;">
+                        <div style="font-size:3.5rem; margin-bottom:0.5rem;">✅</div>
+                        <div style="font-weight:900; color:var(--green); font-size:1.2rem; margin-bottom:0.5rem;">لقد أكملت هذا الواجب!</div>
+                        ${result ? `
+                        <div style="font-size:2.5rem; font-weight:900; color:${barColor}; margin:1rem 0;">${result.score}/${result.total}</div>
+                        <div style="background:var(--surface); border-radius:100px; height:12px; overflow:hidden; margin:0.5rem auto; max-width:200px;">
+                            <div style="background:${barColor}; width:${pct}%; height:100%; border-radius:100px; transition:width 1s;"></div>
+                        </div>
+                        <div style="font-size:1.1rem; font-weight:800; color:${barColor};">${pct}%</div>
+                        ` : ''}
+                    </div>
+                </div>`;
+                return;
+            }
+
+            // Render quiz questions
+            this._renderQuizHomework(hw);
+            return;
+        }
+
+        // ── Google Forms homework (original behavior) ──────────
         if (isTimeUp && !isDone) {
             App.mainContent.innerHTML = `
             <div class="fade-in">
@@ -199,6 +236,13 @@ const StudentView = {
             </div>`;
             return;
         }
+
+        window.markHomeworkDone = async (btn) => {
+            if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+            await Store.saveHomeworkResult(Auth.currentUser.id, hwId);
+            showToast('🎉 تم تسجيل تسليمك بنجاح! +10 عملات، +50 XP', 'success');
+            setTimeout(() => App.navigate('class/' + hw.classId), 1500);
+        };
 
         App.mainContent.innerHTML = `
         <div class="fade-in">
@@ -223,6 +267,139 @@ const StudentView = {
                 </button>
             </div>` : '' }
         </div>`;
+    },
+
+    _renderQuizHomework(hw) {
+        const questions = hw.questions;
+        let currentQ = 0;
+        const studentAnswers = [];
+
+        window.enableHwNext = () => {
+            const btn = document.getElementById('hw-next-btn');
+            if (btn) btn.disabled = false;
+            document.querySelectorAll('.hw-mcq-label').forEach(lbl => {
+                lbl.style.borderColor = 'var(--border)';
+                lbl.style.background = 'var(--surface-2)';
+            });
+            const checked = document.querySelector(`input[name="hw_q_${currentQ}"]:checked`);
+            if (checked) {
+                checked.parentElement.style.borderColor = 'var(--primary)';
+                checked.parentElement.style.background = 'var(--primary-light, rgba(79,70,229,0.05))';
+            }
+        };
+
+        window.submitHwMCQ = () => {
+            const checked = document.querySelector(`input[name="hw_q_${currentQ}"]:checked`);
+            if (checked) {
+                studentAnswers[currentQ] = checked.value;
+                currentQ++;
+                renderQ();
+            }
+        };
+
+        window.submitHwText = () => {
+            const input = document.getElementById('hw-text-ans');
+            if (!input) return;
+            const val = input.value.trim();
+            if (!val) { showToast('الرجاء كتابة إجابة', 'error'); return; }
+            studentAnswers[currentQ] = val;
+            currentQ++;
+            renderQ();
+        };
+
+        const renderQ = () => {
+            if (currentQ >= questions.length) {
+                // All done — calculate score
+                let score = 0;
+                questions.forEach((q, idx) => {
+                    const ans = studentAnswers[idx] || '';
+                    if (ans.toString().trim().toLowerCase() === q.a.toString().trim().toLowerCase()) score++;
+                });
+                submitQuizResult(score);
+                return;
+            }
+
+            const q = questions[currentQ];
+            const pct = (currentQ / questions.length) * 100;
+
+            App.mainContent.innerHTML = `
+            <div class="fade-in" style="padding: 1rem; max-width: 700px; margin: 0 auto;">
+                <button class="btn btn-ghost btn-sm mb-2" onclick="window.history.back()">‹ عودة</button>
+                <div style="background: var(--surface); border: 2px solid var(--border); border-radius: var(--r-xl); padding: 2rem; box-shadow: 0 8px 16px rgba(0,0,0,0.05);">
+                    <div style="text-align:center; color:var(--text); font-weight:900; margin-bottom:1.5rem; font-size:1.3rem; border-bottom: 2px dashed var(--border); padding-bottom: 1rem;">
+                        📝 ${hw.title}
+                    </div>
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                        <div style="color:var(--primary); font-weight:800; font-size:1rem;">
+                            السؤال ${currentQ + 1} من ${questions.length}
+                        </div>
+                        <div style="background:var(--surface-2); border-radius:100px; height:8px; width:100px; overflow:hidden;">
+                            <div style="background:var(--primary); width:${pct}%; height:100%; border-radius:100px; transition:width 0.3s;"></div>
+                        </div>
+                    </div>
+
+                    ${q.img ? `<div style="text-align:center; margin-bottom:1.5rem;"><img src="${q.img}" style="max-width:100%; max-height:250px; border-radius:var(--r-md); border:1px solid var(--border);"></div>` : ''}
+
+                    <div style="font-size:1.2rem; font-weight:800; color:var(--text); margin-bottom:2rem; line-height:1.6;">
+                        ${q.q}
+                    </div>
+
+                    ${q.type === 'mcq' ?
+                        `<div style="display:flex; flex-direction:column; gap:0.75rem;">
+                            ${q.opts.map((opt, idx) => `
+                                <label class="hw-mcq-label" style="display:flex; align-items:center; gap:1rem; padding:1rem; border:2px solid var(--border); border-radius:var(--r-md); cursor:pointer; transition:all 0.2s; background:var(--surface-2);">
+                                    <input type="radio" name="hw_q_${currentQ}" value="${opt.replace(/"/g, '&quot;')}" style="width:22px; height:22px; cursor:pointer;" onchange="enableHwNext()">
+                                    <span style="font-size:1.05rem; color:var(--text); font-weight:600;">${opt}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                        <button class="btn btn-primary btn-block btn-lg" id="hw-next-btn" style="margin-top:2rem;" disabled onclick="submitHwMCQ()">
+                            التالي ❯
+                        </button>`
+                        :
+                        `<div>
+                            <textarea id="hw-text-ans" class="form-input" rows="4" style="font-size:1.1rem; padding:1rem; border-radius:var(--r-md); resize:vertical; background:var(--surface-2);" placeholder="اكتب إجابتك هنا..."></textarea>
+                            <button class="btn btn-primary btn-block btn-lg" id="hw-next-btn" style="margin-top:2rem;" onclick="submitHwText()">
+                                التالي ❯
+                            </button>
+                        </div>`
+                    }
+                </div>
+            </div>`;
+        };
+
+        const submitQuizResult = async (score) => {
+            App.mainContent.innerHTML = '<div style="display:flex;justify-content:center;margin-top:4rem;"><div class="loader-circle"></div></div>';
+            const reward = await Store.saveQuizHomeworkResult(Auth.currentUser.id, hw.id, studentAnswers, score, questions.length);
+            await Auth.refresh();
+            App.updateHeaderCoins();
+
+            const pct = Math.round(score / questions.length * 100);
+            const barColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--gold)' : 'var(--red)';
+            const emoji = pct >= 80 ? '🌟' : pct >= 60 ? '😊' : pct >= 40 ? '😐' : '😓';
+
+            if (reward && reward.coinsEarned > 0) setTimeout(() => spawnCoinFly(reward.coinsEarned), 500);
+
+            App.mainContent.innerHTML = `
+            <div class="fade-in">
+                <div class="game-over-card" style="text-align:center;">
+                    <div style="font-size:4rem; margin-bottom:0.5rem;">${emoji}</div>
+                    <h2 style="margin-bottom:0.5rem;">انتهى الواجب!</h2>
+                    <div class="game-score-display" style="color:${barColor};">${score}/${questions.length}</div>
+                    <div style="background:var(--surface-2); border-radius:100px; height:14px; overflow:hidden; margin:1rem auto; max-width:220px;">
+                        <div style="background:${barColor}; width:${pct}%; height:100%; border-radius:100px; transition:width 1s;"></div>
+                    </div>
+                    <div style="font-size:1.3rem; font-weight:900; color:${barColor}; margin-bottom:0.75rem;">${pct}%</div>
+                    ${reward ? `<div class="game-coins-earned">🪙 +${reward.coinsEarned} عملات &nbsp;·&nbsp; ⚡ +${reward.xpEarned} XP</div>` : ''}
+                    <button class="btn btn-primary btn-block" style="margin-top:1.5rem;" onclick="App.navigate('class/${hw.classId}')">
+                        🏠 العودة للصف
+                    </button>
+                </div>
+            </div>`;
+        };
+
+        renderQ();
     },
 
     // ── GAME ──────────────────────────────────────────────────────────

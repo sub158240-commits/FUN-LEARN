@@ -99,10 +99,12 @@ const Store = {
     async addHomework(hw) {
         const { data } = await supabaseClient.from('homework').insert([{
             title: hw.title,
-            link: hw.link,
+            link: hw.link || null,
             class_id: hw.classId,
             due_date: hw.dueDate || null,
-            responses_link: hw.responsesLink || null
+            responses_link: hw.responsesLink || null,
+            hw_type: hw.hwType || 'google_form',
+            questions: hw.questions || []
         }]).select();
         return toCamel(data ? data[0] : null);
     },
@@ -113,12 +115,33 @@ const Store = {
         const { data } = await supabaseClient.from('homework_results').select('*').eq('user_id', userId).eq('hw_id', hwId).maybeSingle();
         return !!data;
     },
+    async getHomeworkResultForUser(userId, hwId) {
+        const { data } = await supabaseClient.from('homework_results').select('*').eq('user_id', userId).eq('hw_id', hwId).maybeSingle();
+        return toCamel(data);
+    },
     async saveHomeworkResult(userId, hwId) {
         const already = await this.hasCompletedHomework(userId, hwId);
         if (already) return; // prevent duplicate
         await supabaseClient.from('homework_results').insert([{ user_id: userId, hw_id: hwId }]);
         await this.addCoins(userId, 10);
         await this.addXP(userId, 50);
+    },
+    async saveQuizHomeworkResult(userId, hwId, answers, score, total) {
+        const already = await this.hasCompletedHomework(userId, hwId);
+        if (already) return false; // prevent duplicate
+        await supabaseClient.from('homework_results').insert([{
+            user_id: userId,
+            hw_id: hwId,
+            answers: answers,
+            score: score,
+            total: total
+        }]);
+        // Reward coins & XP based on score percentage
+        const coinsEarned = Math.round((score / total) * 20) + 5;
+        const xpEarned = Math.round((score / total) * 100) + 20;
+        await this.addCoins(userId, coinsEarned);
+        await this.addXP(userId, xpEarned);
+        return { coinsEarned, xpEarned };
     },
     async getHomeworkResultsByHw(hwId) {
         const { data } = await supabaseClient.from('homework_results').select('*, users(*)').eq('hw_id', hwId);
@@ -128,6 +151,9 @@ const Store = {
             userId: r.user_id,
             hwId: r.hw_id,
             createdAt: r.created_at,
+            answers: r.answers || [],
+            score: r.score || 0,
+            total: r.total || 0,
             user: toCamel(r.users)
         }));
     },
